@@ -1,16 +1,44 @@
 #!/bin/sh
-[ ! -x $(command -v ffmpeg) ] && echo "Error: ffmpeg is not installed." && exit 1
-[ ! -r "$1" ] && echo "Error: Audio file is not readable." && exit 1
-[ "${2##*.}" != "cue" ] && echo "Error: Cue path does not point to a .cue file." && exit 1
-[ ! -r "$2" ] && echo "Error: Cue file is not readable." && exit 1
+#
+# $Id: $
+#
+# Simple Cue Splitter. Split audio files via CUE sheet without re-encoding
+# Original code by garylaski@github
+#
+# https://cuegenerator.net can be used to quickly build a valid CUE file
 
-#extract audio file extension 
-ext="${1##*.}"
+audiof=
+cuef=
+ext=
+log=false
 
-#since cue files use MM:SS:FF where FF is frames out of 75, convert to HH:MM:SS[.m...] that ffmpeg needs
-convert_to_ms() {
+error() { echo $1; exit 1; }
+
+usage()
+{
+	echo "\
+Usage: scuesplit.sh [-h] [-a <audio file>] [-c <cue file>]
+   -a Audio file to process
+   -c Cue file to use when processing audio file (-a)
+   -h Help
+"
+	exit $(( $1 - 1 ))
+}
+
+preflight()
+{
+	type ffmpeg >/dev/null 2>&1 || error "Error: Missing ffmpeg in path"
+	[ -z "$audiof" ] || [ -z "$cuef" ] && usage 2
+	[ -r "$audiof" ] || error "Error: Cannot read audio file: $audiof"
+	[ -r "$cuef" ] || error "Error: Cannot read cue file: $cuef"
+}
+
+# cue files use MM:SS:FF - where FF is frames out of 75
+# convert to HH:MM:SS[.m...] for ffmpeg
+convert_to_ms()
+{
 	prefix=$(echo $1 | head -c 5)
-	# If minutes part is over 59, carry that into the hour field
+	# If minutes part is over 59 carry that into the hour field
 	minutes_total=$(echo $1 | cut -d: -f1)
 	hours=$(($minutes_total / 60))
 	minutes=$(($minutes_total % 60))
@@ -21,39 +49,52 @@ convert_to_ms() {
 	printf '%s:%s:%s.%s' $hours $minutes $seconds $frames
 }
 
-#Unquote CUE fields that are quoted "like this"
-unquote() {
+# Unquote Cue fields that are quoted "like this"
+unquote()
+{
 	unquoted=${1%\"}
 	unquoted=${unquoted#\"}
 	printf '%s\n' "$unquoted"
 }
 
-#Iterate over cue file
-index=0
-cue_file=$(cat "$2")
-IFS='
+# Run ffmpeg with arguments
+ffcmd()
+{
+	ffmpeg -i $audiof -acodec copy -ss $start_time -to $end_time \
+		"$this_track_num - $this_performer - $this_title.${ext}" 
+}
+
+# Iterate over cue file
+process_cue()
+{
+	echo "Processing audio file: $audiof with cue file: $cuef"
+	index=0
+	cue_file=$(cat "$cuef")
+	IFS='
 '
-for line in $cue_file; do
-	#Remove leading whitespace
-	trim=${line#${line%%[![:space:]]*}}
-	#What does out line start with
-	case $trim in
-		TRACK*)
-			track_num=${trim##TRACK\ }
-			track_num=${track_num%%\ AUDIO}
-			performer=$primary_performer #Reset performer to the main performer
-			;;
-		TITLE\ *)
-			title=$(unquote "${trim##TITLE\ }")
-			;;
-		INDEX\ 00*)
+	for line in $cue_file
+	do
+		#Remove leading whitespace
+		trim=${line#${line%%[![:space:]]*}}
+		#What does out line start with
+		case $trim in
+		  TRACK*)
+		  	track_num=${trim##TRACK\ }
+		  	track_num=${track_num%%\ AUDIO}
+		  	#Reset performer to the main performer
+		  	performer=$primary_performer
+		  	;;
+		  TITLE\ *)
+		  	title=$(unquote "${trim##TITLE\ }")
+		  	;;
+		  INDEX\ 00*)
 			end_time=$(convert_to_ms ${trim##INDEX\ 00\ })
-			[ $index -eq 1 ] && ffmpeg -i "$1" -acodec copy -ss $start_time -to $end_time "$this_track_num - $this_performer - $this_title.$ext" 
+			[ $index -eq 1 ] && ffcmd
 			index=0
 			;;
-		INDEX\ 01*)
+		  INDEX\ 01*)
 			end_time=$(convert_to_ms ${trim##INDEX\ 01\ })
-			[ $index -eq 1 ] && ffmpeg -i "$1" -acodec copy -ss $start_time -to $end_time "$this_track_num - $this_performer - $this_title.$ext"
+			[ $index -eq 1 ] && ffcmd
 			index=0
 			start_time=$end_time
 			this_track_num=$track_num
@@ -63,16 +104,38 @@ for line in $cue_file; do
 			;;
 		PERFORMER\ *)
 			performer=$(unquote "${trim##PERFORMER\ }")
-			#CUE files can have both a primary performer (album
-			#artist), and different track-specific performers. If
-			#we haven't yet had a TRACK line, take the PERFORMER
-			#line as the primary performer.
-			if [ "$track_num" = "" ]; then
-				primary_performer=$performer
-			fi
+			# CUE files can have both a primary performer
+			# (album # artist)  and different track-specific
+			# performers. If we haven't yet had a TRACK line, then
+			# take the PERFORMER line as the primary performer.
+			[ "$track_num" = "" ] && primary_performer=$performer
 			;;
+		esac
+	done
+
+# The cue file format doesn't tell us when to end the last track so we need to
+# use ffprobe to find the end
+	end_time=$(ffprobe -i "$audiof" -show_entries format=duration -v quiet \
+		-of csv="p=0" -sexagesimal)
+	[ -n "$end_time" ] ||
+		error "Could not determine the last track's end time"
+	ffcmd
+	echo "Finished"
+}
+
+process()
+{
+	preflight && process_cue
+}
+
+while getopts 'a:c:h' opts
+do
+	case $opts in
+	  a) mode=process audiof=$OPTARG ext="${audiof##*.}";;
+	  c) mode=process cuef=$OPTARG;;
+	  h) mode="usage 1";;
 	esac
 done
-#With the way cue files are formatted, they dont tell us when to end the last track, so we have to manually determine
-end_time=$(ffprobe -i "$1" -show_entries format=duration -v quiet -of csv="p=0" -sexagesimal)
-ffmpeg -nostats -loglevel 0 -i "$1" -acodec copy -ss $start_time -to $end_time "$this_track_num - $this_performer - $this_title.$ext"
+shift $((OPTIND - 1))
+[ $# -ne 0 ] && usage 2
+$mode
