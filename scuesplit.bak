@@ -28,8 +28,7 @@ Usage: scuesplit [-h] [-a <audio file>] [-c <cue file>] [-l <file>]
 
 preflight()
 {
-	type ffmpeg >/dev/null 2>&1 || error "Error: Missing ffmpeg in PATH"
-	type ffprobe >/dev/null 2>&1 || error "Error: Missing ffprobe in PATH"
+	type ffmpeg >/dev/null 2>&1 || error "Error: Missing ffmpeg in path"
 	[ -z "$audiof" ] || [ -z "$cuef" ] && usage 2
 	[ -r "$audiof" ] || error "Error: Cannot read audio file: $audiof"
 	[ -r "$cuef" ] || error "Error: Cannot read cue file: $cuef"
