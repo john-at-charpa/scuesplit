@@ -1,8 +1,6 @@
 #!/bin/sh
 #
-# $Id: $
-#
-# Simple Cue Splitter. Split audio files via CUE sheet without re-encoding
+# Simple Cue Splitter. Split audio files via CUE sheet without re-encoding.
 # Original code by garylaski@github
 #
 # https://cuegenerator.net can be used to quickly build a valid CUE file
@@ -19,11 +17,11 @@ error() { echo $1; exit 1; }
 usage()
 {
 	echo "\
-Usage: scuesplit.sh [-h] [-l <file>] [-a <audio file>] [-c <cue file>]
+Usage: scuesplit.sh [-h] [-a <audio file>] [-c <cue file>] [-l <file>]
    -a Audio file to process
-   -c Cue file to use when processing audio file (-a)
+   -c Cue file to use when processing the audio file (-a)
    -h Help
-   -l Log ffmpeg processing output to <file>
+   -l Log ffmpeg output to <file>
 "
 	exit $(( $1 - 1 ))
 }
