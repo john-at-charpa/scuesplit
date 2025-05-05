@@ -10,17 +10,20 @@
 audiof=
 cuef=
 ext=
+# We don't log by default
 log=false
+logfile=/dev/null
 
 error() { echo $1; exit 1; }
 
 usage()
 {
 	echo "\
-Usage: scuesplit.sh [-h] [-a <audio file>] [-c <cue file>]
+Usage: scuesplit.sh [-h] [-l <file>] [-a <audio file>] [-c <cue file>]
    -a Audio file to process
    -c Cue file to use when processing audio file (-a)
    -h Help
+   -l Log ffmpeg processing output to <file>
 "
 	exit $(( $1 - 1 ))
 }
@@ -31,6 +34,7 @@ preflight()
 	[ -z "$audiof" ] || [ -z "$cuef" ] && usage 2
 	[ -r "$audiof" ] || error "Error: Cannot read audio file: $audiof"
 	[ -r "$cuef" ] || error "Error: Cannot read cue file: $cuef"
+	$log && touch $logfile || error "Error: Cannot write to $logfile"
 }
 
 # cue files use MM:SS:FF - where FF is frames out of 75
@@ -62,7 +66,7 @@ ffcmd()
 {
 	ffmpeg -i $audiof -acodec copy -ss $start_time -to $end_time \
 		"$this_track_num - $this_performer - $this_title.${ext}" 
-}
+} >> $logfile 2>&1
 
 # Iterate over cue file
 process_cue()
@@ -102,7 +106,7 @@ process_cue()
 			this_title=$title
 			index=1
 			;;
-		PERFORMER\ *)
+		  PERFORMER\ *)
 			performer=$(unquote "${trim##PERFORMER\ }")
 			# CUE files can have both a primary performer
 			# (album # artist)  and different track-specific
@@ -128,12 +132,13 @@ process()
 	preflight && process_cue
 }
 
-while getopts 'a:c:h' opts
+while getopts 'a:c:hl:' opts
 do
 	case $opts in
 	  a) mode=process audiof=$OPTARG ext="${audiof##*.}";;
 	  c) mode=process cuef=$OPTARG;;
 	  h) mode="usage 1";;
+	  l) log=true logfile=$OPTARG;;
 	esac
 done
 shift $((OPTIND - 1))
