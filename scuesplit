@@ -17,7 +17,7 @@ error() { echo $1; exit 1; }
 usage()
 {
 	echo "\
-Usage: scuesplit.sh [-h] [-a <audio file>] [-c <cue file>] [-l <file>]
+Usage: scuesplit [-h] [-a <audio file>] [-c <cue file>] [-l <file>]
    -a Audio file to process
    -c Cue file to use when processing the audio file (-a)
    -h Help

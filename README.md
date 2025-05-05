@@ -6,7 +6,7 @@ As far as I am aware, this should work with any audio formats that ffmpeg can sp
 
 ## Use
 ```
-Usage: scuesplit.sh [-h] [-a <audio file>] [-c <cue file>] [-l <log file>]
+Usage: scuesplit [-h] [-a <audio file>] [-c <cue file>] [-l <log file>]
    -a Audio file to process
    -c Cue file to use when processing the audio file (-a)
    -h Help
